@@ -40,6 +40,12 @@ class BaseJSONWebTokenAPIView(GenericAPIView):
         response_serializer = self.get_serializer(
             response_data, context={'request': request}
         )
+
+        if not response_serializer.is_valid():
+            return Response(
+                serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
+
         response = Response(response_serializer.data)
 
         if api_settings.JWT_AUTH_COOKIE:

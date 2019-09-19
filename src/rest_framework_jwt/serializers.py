@@ -52,37 +52,41 @@ def _check_user(payload):
     return user
 
 
-class JSONWebTokenSerializer(serializers.Serializer):
+def _get_credentials(data):
+    return {
+        self.username_field: data.get(self.username_field),
+        'password': data.get('password')
+    }
+
+
+class BaseJSONWebTokenSerializer(serializers.Serializer):
     """
-    Serializer class used to validate a username and password.
-
-    'username' is identified by the custom UserModel.USERNAME_FIELD.
-
-    Returns a JSON Web Token that can be used to authenticate later calls.
+    Serionalizer class used to validate anything.
     """
 
-    password = serializers.CharField(
-        write_only=True, required=True, style={'input_type': 'password'})
     token = serializers.CharField(read_only=True)
 
     def __init__(self, *args, **kwargs):
-        """Dynamically add the USERNAME_FIELD to self.fields."""
-        super(JSONWebTokenSerializer, self).__init__(*args, **kwargs)
+        """Dynamically add custom fields."""
+        custom_auth = kwargs.pop('custom_auth', authenticate)
+        extract_credential = kwargs.pop('extract_credential', _get_credentials)
+        super().__init__(*args, **kwargs)
 
-        self.fields[self.username_field
-                    ] = serializers.CharField(write_only=True, required=True)
+        for field, field_props in kwargs.get('fields', []):
+            self.fields[field] = serializers.CharField(write_only=True,
+                                                      required=True,
+                                                      **field_props)
 
-    @property
-    def username_field(self):
-        return get_username_field()
+        """Use own authentication method, else use provided by Django."""
+        self.authenticate_request = custom_auth
+
+        """Use own credential extraction, else use default extractor"""
+        self.get_credentials = extract_credential
 
     def validate(self, data):
-        credentials = {
-            self.username_field: data.get(self.username_field),
-            'password': data.get('password')
-        }
+        credentials = self.get_credentials(data)
 
-        user = authenticate(self.context['request'], **credentials)
+        user = self.authenticate_request(self.context['request'], **credentials)
 
         if not user:
             msg = _('Unable to log in with provided credentials.')
@@ -95,6 +99,29 @@ class JSONWebTokenSerializer(serializers.Serializer):
             'user': user,
             'issued_at': payload.get('iat', unix_epoch())
         }
+
+
+class JSONWebTokenSerializer(BaseJSONWebTokenSerializer):
+    """
+    Serializer class used to validate a username and password.
+
+    'username' is identified by the custom UserModel.USERNAME_FIELD.
+
+    Returns a JSON Web Token that can be used to authenticate later calls.
+    """
+
+    def __init__(self, *args, **kwargs):
+        fields = [
+            (get_username_field()),
+            ('password', {write_only: True,
+                          required: True,
+                          style: {'input_type': 'password'}}),
+            ]
+        super().__init__(*args, **kwargs, fields=fields)
+
+    @property
+    def username_field(self):
+        return get_username_field()
 
 
 class VerifyAuthTokenSerializer(serializers.Serializer):
