@@ -31,6 +31,9 @@ class BaseJSONWebTokenAPIView(GenericAPIView):
                 serializer.errors, status=status.HTTP_400_BAD_REQUEST
             )
 
+        """
+
+        Really not sure what these lines are for
         user = serializer.validated_data.get('user') or request.user
         token = serializer.validated_data.get('token')
         issued_at = serializer.validated_data.get('issued_at')
@@ -40,14 +43,11 @@ class BaseJSONWebTokenAPIView(GenericAPIView):
         response_serializer = self.get_serializer(
             response_data, context={'request': request}
         )
-
-        if not response_serializer.is_valid():
-            return Response(
-                serializer.errors, status=status.HTTP_400_BAD_REQUEST
-            )
-
         response = Response(response_serializer.data)
 
+        """
+
+        response = Response(serializer.validate(request.data))
         if api_settings.JWT_AUTH_COOKIE:
             expiration = (
                 datetime.utcnow() + api_settings.JWT_EXPIRATION_DELTA
